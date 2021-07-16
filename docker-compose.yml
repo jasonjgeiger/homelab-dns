@@ -1,0 +1,38 @@
+version: "3"
+
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    depends_on: 
+      - cloudflared
+    network_mode: "host"
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "67:67/udp"
+      - "80:80/tcp"
+      - "443:443/tcp"
+    environment:
+      TZ: 'America/Vancouver'
+      WEBPASSWORD: 'admin'
+      DNS1: '127.0.0.1#5053'
+      DNS2: 'no'
+    volumes:
+      - './etc-pihole/:/etc/pihole/'
+      - './etc-dnsmasq.d/:/etc/dnsmasq.d/'
+    cap_add:
+      - NET_ADMIN
+      - NET_BIND_SERVICE
+    restart: always
+
+  cloudflared:
+    container_name: cloudflared
+    image: crazymax/cloudflared:latest
+    ports:
+      - "5053:5053/udp"
+      - "49312:49312/tcp"
+    environment:
+      - "TZ=America/Vancouver"
+      - "TUNNEL_DNS_UPSTREAM=https://1.1.1.1/dns-query,https://1.0.0.1/dns-query"
+    restart: always
