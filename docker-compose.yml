@@ -1,37 +1,53 @@
 version: "3"
 
+# More info at https://github.com/pi-hole/docker-pi-hole/ and https://docs.pi-hole.net/
 services:
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
-    depends_on: 
-      - cloudflared
+    # For DHCP it is recommended to remove these ports and instead add: network_mode: "host"
     ports:
       - "53:53/tcp"
       - "53:53/udp"
-      - "67:67/udp"
+      - "67:67/udp" # Only required if you are using Pi-hole as your DHCP server
       - "80:80/tcp"
-      - "443:443/tcp"
     environment:
       TZ: 'America/Vancouver'
       WEBPASSWORD: 'admin'
-      DNS1: '127.0.0.1#5053'
-      DNS2: 'no'
+    # Volumes store your data between container upgrades
     volumes:
-      - './etc-pihole/:/etc/pihole/'
-      - './etc-dnsmasq.d/:/etc/dnsmasq.d/'
+      - './etc-pihole:/etc/pihole'
+      - './etc-dnsmasq.d:/etc/dnsmasq.d'
+    #   https://github.com/pi-hole/docker-pi-hole#note-on-capabilities
     cap_add:
-      - NET_ADMIN
-      - NET_BIND_SERVICE
-    restart: always
-
-  cloudflared:
-    container_name: cloudflared
-    image: crazymax/cloudflared:latest
+      - NET_ADMIN # Required if you are using Pi-hole as your DHCP server, else not needed
+    restart: unless-stopped
+    
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:latest
+    container_name: nodeexp
+    restart: unless-stopped
     ports:
-      - "5053:5053/udp"
-      - "49312:49312/tcp"
-    environment:
-      - "TZ=America/Vancouver"
-      - "TUNNEL_DNS_UPSTREAM=https://1.1.1.1/dns-query,https://1.0.0.1/dns-query"
-    restart: always
+      - 9100:9100
+
+  docker-exporter:
+    image: prometheusnet/docker_exporter
+    container_name: docker_exporter
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - 9417:9417
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - 8000:8000 
+      - 9000:9000 
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data portainer/portainer-ce
