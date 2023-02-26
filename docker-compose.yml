@@ -1,8 +1,5 @@
 version: "3"
 
-volumes:
-  portainer_data: {}
-
 services:
   pihole:
     container_name: pihole
@@ -19,31 +16,10 @@ services:
       - './etc-dnsmasq.d:/etc/dnsmasq.d'
     restart: unless-stopped
 
-  node-exporter:
-    image: quay.io/prometheus/node-exporter:latest
-    container_name: nodeexp
-    restart: unless-stopped
+  pihole-exporter:
+    image: ekofr/pihole-exporter:latest
+    container_name: pihole-exporter
+    env_file:
+      - ./pihole-exporter.env
     ports:
-      - 9100:9100
-
-  docker-exporter:
-    image: prometheusnet/docker_exporter
-    container_name: docker_exporter
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-    ports:
-      - 9417:9417
-
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    restart: unless-stopped
-    security_opt:
-      - no-new-privileges:true
-    ports:
-      - 8000:8000 
-      - 9000:9000 
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data portainer/portainer-ce
+      - 9617:9617
