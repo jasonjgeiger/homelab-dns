@@ -1,50 +1,61 @@
 # Homelab DNS
 
-**High availability (HA)** Pi-hole: two nodes share a **virtual IP (VIP)** via keepalived so clients keep using one DNS address if a node fails. Upstream queries go through **dnscrypt-proxy** on a private Docker bridge, then Pi-hole.
+HA Pi-hole on two nodes: **keepalived** holds a shared **VIP**; clients keep one DNS address on failover. **dnscrypt-proxy** sits on a private Docker bridge as Pi-hole’s upstream.
 
-## Layout
+## Which Compose file to run
 
-| Path | Purpose |
-|------|---------|
-| **`dns-setup/`** | Pi-hole data dirs (`pihole/`, `dnsmasq.d/`), health/notify scripts, optional macvlan helper |
-| **`macvlan/`** | `compose.yml`, **`.env`** (from `.env.example`) — Docker macvlan network `pihole_macvlan` |
-| **`dnscrypt-proxy/`** | `compose.yml`, **`.env`** (from `.env.example`), internal bridge + dnscrypt; **`etc-dnscrypt-proxy/`** |
-| **`pihole/`** | `compose.yml`, **`.env`** (from `.env.example`), Pi-hole on macvlan + internal bridge |
-| **`keepalived/`** | `compose.yml`, **`.env`** (from `.env.example`), **`keepalived.conf.template`**, rendered **`keepalived.conf`** |
-| **`compose.yml`** (repo root) | Merges fragments with Compose **`include`** + per-fragment **`env_file`** (Docker Compose **2.24+**) |
-| **`nebula-sync/`** | Optional Pi-hole v6 config sync between nodes |
+Run **only the root project** from this repository’s **top level**:
 
-## Example IPs
+```bash
+docker compose --project-directory . up -d
+```
 
-| Role | Address |
-|------|---------|
-| Pi-hole on VM1 | 192.168.100.5 |
-| Pi-hole on VM2 | 192.168.100.10 |
-| VIP (set in DHCP for clients) | 192.168.100.100 |
+That command loads **`compose.yml`**, which **`include`s** these fragments (each with its own **`env_file`**):
 
-Adjust **`macvlan/.env`** (LAN / parent NIC), **`pihole/.env`**, and **`keepalived/.env`** on each node (IPs, VRRP role, priority).
+| Included file | Role |
+|---------------|------|
+| `macvlan/compose.yml` | Macvlan network `pihole_macvlan` |
+| `dnscrypt-proxy/compose.yml` | Internal bridge + dnscrypt-proxy |
+| `pihole/compose.yml` | Pi-hole |
+| `keepalived/compose.yml` | keepalived (`network_mode: service:pihole`) |
 
-## Prerequisites
+**Do not** run `docker compose` from inside `pihole/`, `macvlan/`, etc. alone—you would get an incomplete project (missing networks, peers, or mounts). **`--project-directory .`** must be the repo root so bind mounts like `./dns-setup/...` and `./keepalived/...` resolve correctly.
 
-- Docker + Docker Compose **v2.24+** (for `include` + per-include `env_file`)
-- `gettext` / `envsubst` (to render `keepalived.conf` from the template)
-- Same VIP, subnet, and `VRRP_AUTH_PASS` on both nodes; unique per-node Pi-hole IP and keepalived priority
+Equivalent without `include` (older tooling) would be the same four `-f` paths plus `--project-directory "$(pwd)"`; the root **`compose.yml`** is the supported entrypoint.
 
-## Secrets
+## Deploying on dns1 and dns2
 
-| Location | Notes |
-|----------|--------|
-| **`macvlan/.env`** | Host NIC + subnet/gateway for the macvlan network (typically **same** on both nodes). |
-| **`pihole/.env`** | `WEBPASSWORD` — same on both nodes if you want one login (needed for nebula-sync too). |
-| **`keepalived/.env`** | `VRRP_AUTH_PASS` — **must match on both nodes**. |
+Use the **same git tree** on both servers (clone, rsync, or pull). On **each** host you maintain **local** `.env` files (not committed). The **compose files are identical** on dns1 and dns2; only **env values** (and rendered **`keepalived/keepalived.conf`**) differ.
 
-**`nebula-sync/.env`** (if used): `PRIMARY` / `REPLICAS` use `http://host|password` — password part matches Pi-hole.
+| File | dns1 | dns2 |
+|------|------|------|
+| `macvlan/.env` | Usually **same** on both (parent NIC, subnet, gateway for the shared LAN). |
+| `dnscrypt-proxy/.env` | Usually **same** (e.g. `TZ`). |
+| `pihole/.env` | **`PIHOLE_IPV4`** = this host’s Pi-hole IP on macvlan. **`SERVERIP`** = VIP (same both). Match **`WEBPASSWORD`** if you want one admin login / nebula-sync. |
+| `keepalived/.env` | **`ROUTER_ID`** unique per node. **`VRRP_STATE`** `MASTER` on preferred primary, **`BACKUP`** on the other. **`VRRP_PRIORITY`** higher on primary (e.g. 110 vs 100). **`UNICAST_SRC_IP`** = this node’s LAN IP; **`UNICAST_PEER_IP`** = the other node’s LAN IP. **`VIP_CIDR`** and **`VRRP_AUTH_PASS`** **must match** on both. |
 
-`.gitignore` excludes each service **`.env`**, **`keepalived/keepalived.conf`**, and **`nebula-sync/.env`**.
+After editing **`keepalived/.env`** on a host, re-render config on **that** host:
 
-## Deploy
+```bash
+(cd keepalived && set -a && source .env && set +a && envsubst < keepalived.conf.template > keepalived.conf)
+```
 
-**1.** Copy env templates (once per machine, then edit):
+Then from the repo root:
+
+```bash
+docker compose --project-directory . up -d
+```
+
+**Example (illustrative IPs)**  
+
+| | dns1 | dns2 |
+|--|------|------|
+| Pi-hole on macvlan | `192.168.100.5` | `192.168.100.10` |
+| VIP (DHCP DNS for clients) | `192.168.100.100` | `192.168.100.100` |
+| VRRP | `MASTER`, priority `110` | `BACKUP`, priority `100` |
+| Unicast src / peer | src `.5`, peer `.10` | src `.10`, peer `.5` |
+
+## First-time setup on each server
 
 ```bash
 cp macvlan/.env.example macvlan/.env
@@ -53,34 +64,37 @@ cp pihole/.env.example pihole/.env
 cp keepalived/.env.example keepalived/.env
 ```
 
-**2.** Render keepalived config (after editing **`keepalived/.env`**):
+Edit the `.env` files per the dns1/dns2 table above, render **`keepalived.conf`** (command above), then **`docker compose --project-directory . up -d`**.
 
-```bash
-cd keepalived && set -a && source .env && set +a && envsubst < keepalived.conf.template > keepalived.conf && cd ..
-```
+**Old external network:** if `pihole_macvlan` already exists from a manual `docker network create`, remove it once: `docker network rm pihole_macvlan`, then bring the stack up again.
 
-**3.** Bring the stack up from the **repo root**:
+## Repository layout
 
-```bash
-docker compose --project-directory . up -d
-```
+| Path | Purpose |
+|------|---------|
+| `compose.yml` | Root Compose project (`include` + per-fragment `env_file`, Compose **v2.24+**) |
+| `macvlan/` | Macvlan network |
+| `dnscrypt-proxy/` | Internal bridge + dnscrypt; `etc-dnscrypt-proxy/` |
+| `pihole/` | Pi-hole |
+| `keepalived/` | VRRP sidecar; `keepalived.conf.template` → `keepalived.conf` |
+| `dns-setup/` | Pi-hole data dirs, notify/check scripts, optional `create_macvlan.sh` |
+| `nebula-sync/` | Optional Pi-hole v6 config sync |
 
-`--project-directory .` is required so volume paths in the fragments resolve from the repo root.
+Git ignores `*/.env`, `keepalived/keepalived.conf`, and `nebula-sync/.env`.
 
-On the **second node**, use different **`pihole/.env`** (e.g. `PIHOLE_IPV4`) and **`keepalived/.env`** (e.g. `ROUTER_ID`, `VRRP_STATE`, `VRRP_PRIORITY`, unicast IPs), then repeat steps 2–3.
+## Requirements
 
-If you still have an **external** Docker network named `pihole_macvlan` from an older layout, remove it once (`docker network rm pihole_macvlan`) so Compose can create it from **`macvlan/compose.yml`** + **`macvlan/.env`**.
+- Docker and Compose **v2.24+**
+- `gettext` / `envsubst` for `keepalived.conf`
 
 ## Optional
 
-- **`dns-setup/create_macvlan.sh`** — only for manual recovery; Compose creates the network from **`macvlan/compose.yml`** + **`macvlan/.env`**.
-- **[nebula-sync](https://github.com/lovelaze/nebula-sync)** — `cd nebula-sync && ./deploy.sh` (creates `.env` from `.env.example` on first run). On replicas, enable `webserver.api.app_sudo` if you use app passwords (see upstream README).
-- **Web login** — `WEBPASSWORD` is applied as `FTLCONF_webserver_api_password`. After changing it, recreate the `pihole` container or run `docker exec -it pihole pihole setpassword`.
+- **`dns-setup/create_macvlan.sh`** — emergency `docker network create` only; Compose normally owns the macvlan from `macvlan/`.
+- **[nebula-sync](https://github.com/lovelaze/nebula-sync)** — `cd nebula-sync && ./deploy.sh`. See upstream for replicas / `webserver.api.app_sudo`.
+- **Pi-hole password** — after changing `WEBPASSWORD`, recreate `pihole` or run `docker exec -it pihole pihole setpassword`.
 
 ## Validate
 
 ```bash
 ./dns-setup/validate_all.sh
 ```
-
-Runs `dns-setup/validate.sh` (layout, keepalived template, `docker compose config` when `.env` files exist) and `nebula-sync/validate.sh`.
