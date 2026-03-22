@@ -2,7 +2,6 @@
 .DS_Store
 
 # Per-service secrets (copy from each `.env.example`)
-macvlan/.env
 dnscrypt-proxy/.env
 pihole/.env
 keepalived/.env

@@ -11,17 +11,14 @@ die() { echo "error: $*" >&2; exit 1; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing '$1' in PATH"; }
 
 stack_compose() {
-  # Multi-file compose uses ONE project directory for bind mounts; without this, it follows the *first*
-  # -f file (macvlan/), breaking paths like ./keepalived.conf → macvlan/keepalived.conf. Anchor at repo root.
+  # Multi-file compose uses ONE project directory for bind mounts; anchor at repo root.
   docker compose \
     --project-directory "$ROOT" \
     -p "$PROJECT_NAME" \
-    -f "$ROOT/macvlan/compose.yml" \
     -f "$ROOT/dnscrypt-proxy/compose.yml" \
     -f "$ROOT/pihole/compose.yml" \
     -f "$ROOT/keepalived/compose.yml" \
     -f "$ROOT/nebula-sync/compose.yml" \
-    --env-file "$ROOT/macvlan/.env" \
     --env-file "$ROOT/dnscrypt-proxy/.env" \
     --env-file "$ROOT/pihole/.env" \
     --env-file "$ROOT/nebula-sync/.env" \
@@ -29,7 +26,7 @@ stack_compose() {
 }
 
 preflight_env_files() {
-  for f in macvlan/.env dnscrypt-proxy/.env pihole/.env nebula-sync/.env; do
+  for f in dnscrypt-proxy/.env pihole/.env nebula-sync/.env; do
     [[ -f "$ROOT/$f" ]] || die "missing $f — run: $0 init"
   done
 }
@@ -55,7 +52,7 @@ cmd_up() {
 }
 
 stack_down() {
-  if [[ -f "$ROOT/macvlan/.env" && -f "$ROOT/pihole/.env" ]]; then
+  if [[ -f "$ROOT/pihole/.env" && -f "$ROOT/dnscrypt-proxy/.env" ]]; then
     stack_compose down --remove-orphans
   else
     echo "warn: missing some .env files; running: docker compose -p $PROJECT_NAME down" >&2
@@ -74,7 +71,7 @@ parse_yes_flag() {
 # Remove project containers, networks, declared/anonymous volumes for this stack, and images used only by these services.
 stack_purge() {
   local f
-  for f in macvlan/.env dnscrypt-proxy/.env pihole/.env nebula-sync/.env; do
+  for f in dnscrypt-proxy/.env pihole/.env nebula-sync/.env; do
     [[ -f "$ROOT/$f" ]] || die "missing $f — cannot run compose teardown. Use '$0 down' or restore .env from *.env.example"
   done
   echo "==> docker compose down --remove-orphans -v --rmi all (project $PROJECT_NAME only)"
@@ -100,7 +97,6 @@ cmd_wipe() {
   stack_purge
   echo "==> Removing local env and rendered keepalived config"
   rm -f \
-    "$ROOT/macvlan/.env" \
     "$ROOT/dnscrypt-proxy/.env" \
     "$ROOT/pihole/.env" \
     "$ROOT/keepalived/.env" \
@@ -188,7 +184,7 @@ cmd_init() {
 
   if [[ "$FORCE" -eq 0 ]]; then
     local existing=0
-    for d in macvlan dnscrypt-proxy pihole keepalived nebula-sync; do
+    for d in dnscrypt-proxy pihole keepalived nebula-sync; do
       [[ -f "$ROOT/$d/.env" ]] && existing=1
     done
     [[ -f "$ROOT/keepalived/keepalived.conf" ]] && existing=1
@@ -249,19 +245,16 @@ cmd_init() {
   web_q=$(quote_env_value "$webpass")
   vrrp_q=$(quote_env_value "$vrrp_secret")
 
-  mkdir -p "$ROOT/macvlan" "$ROOT/dnscrypt-proxy" "$ROOT/pihole" "$ROOT/keepalived" "$ROOT/nebula-sync"
-
-  cat >"$ROOT/macvlan/.env" <<EOF
-PARENT_INTERFACE=${iface}
-MACVLAN_SUBNET=${subnet}
-MACVLAN_GATEWAY=${gateway}
-EOF
+  mkdir -p "$ROOT/dnscrypt-proxy" "$ROOT/pihole" "$ROOT/keepalived" "$ROOT/nebula-sync"
 
   cat >"$ROOT/dnscrypt-proxy/.env" <<EOF
 TZ=${tz}
 EOF
 
   cat >"$ROOT/pihole/.env" <<EOF
+PARENT_INTERFACE=${iface}
+MACVLAN_SUBNET=${subnet}
+MACVLAN_GATEWAY=${gateway}
 PIHOLE_IPV4=${my_pihole}
 SERVERIP=${vip}
 DNS1=10.0.1.2#5300

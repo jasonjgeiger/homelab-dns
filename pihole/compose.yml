@@ -1,5 +1,14 @@
 networks:
-  # pihole_macvlan is defined in ../macvlan/compose.yml (merged by stack.sh).
+  # Vars from pihole/.env (PARENT_INTERFACE, MACVLAN_*). Defined here (not a separate compose file)
+  # so pihole_macvlan is always in the merged project.
+  pihole_macvlan:
+    driver: macvlan
+    driver_opts:
+      parent: ${PARENT_INTERFACE}
+    ipam:
+      config:
+        - subnet: ${MACVLAN_SUBNET}
+          gateway: ${MACVLAN_GATEWAY}
   # Duplicates dnscrypt-proxy/compose.yml; merge collapses to one network.
   pihole_internal:
     driver: bridge
