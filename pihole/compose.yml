@@ -1,5 +1,5 @@
 networks:
-  # pihole_macvlan is defined in ../macvlan/compose.yml (root compose include).
+  # pihole_macvlan is defined in ../macvlan/compose.yml (merged by stack.sh).
   # Duplicates dnscrypt-proxy/compose.yml; merge collapses to one network.
   pihole_internal:
     driver: bridge

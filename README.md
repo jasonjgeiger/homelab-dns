@@ -2,53 +2,52 @@
 
 HA Pi-hole on two nodes: **keepalived** holds a shared **VIP**; clients keep one DNS address on failover. **dnscrypt-proxy** sits on a private Docker bridge as Pi-hole’s upstream. **[nebula-sync](https://github.com/lovelaze/nebula-sync)** keeps Pi-hole v6 settings aligned between both instances.
 
-## Which Compose file to run
+There is **no root `compose.yml`**. **`stack.sh`** merges the fragment compose files under a fixed project name (**`pihole`**) and starts services in order: **dnscrypt-proxy → pihole → keepalived → nebula-sync**.
 
-Run **only the root project** from this repository’s **top level**:
+## Commands (repo root)
+
+| Command | Purpose |
+|---------|---------|
+| `./stack.sh init` | Interactive prompts → writes `*/.env` and `keepalived/keepalived.conf` |
+| `./stack.sh init --force` | Same, skip overwrite confirmation |
+| `./stack.sh up` | Bring the stack up (ordered starts) |
+| `./stack.sh down` | Stop/remove project **`pihole`** |
+| `./stack.sh trash [--yes]` | **`docker compose down --remove-orphans -v --rmi all`** for project **`pihole` only** (containers, project networks, compose/volume data, images used by these services) |
+| `./stack.sh wipe [--yes]` | Same as **`trash`**, then deletes **`macvlan/.env`**, **`dnscrypt-proxy/.env`**, **`pihole/.env`**, **`keepalived/.env`**, **`nebula-sync/.env`**, and **`keepalived/keepalived.conf`** |
+| `./stack.sh pull` | Pull images |
+| `./stack.sh ps` / `logs` / `config` / `exec` … | Passed through to `docker compose` with the same files and env |
+
+**`trash`** and **`wipe`** ask for confirmation unless you pass **`--yes`** or **`-y`**. Both need all four Compose **`.env`** files present so **`docker compose`** can resolve the project. **`down`** is lighter (no **`-v`** / **`--rmi`**). Bind-mounted host dirs (e.g. Pi-hole data) are never removed by Compose.
 
 ```bash
-docker compose --project-directory . up -d
+chmod +x stack.sh   # once
+./stack.sh init
+./stack.sh up
 ```
 
-That command loads **`compose.yml`**, which **`include`s** these fragments (each with its own **`env_file`** where noted):
+Compose flags used internally: **`--project-directory`** = repo root, **`-p pihole`**, five **`-f`** fragment paths, four **`--env-file`** entries (`macvlan`, `dnscrypt-proxy`, `pihole`, `nebula-sync`). **`keepalived/.env`** is not passed to Compose (only used to render **`keepalived.conf`**).
 
-| Included file | Role |
-|---------------|------|
-| `macvlan/compose.yml` | Macvlan network `pihole_macvlan` |
-| `dnscrypt-proxy/compose.yml` | Internal bridge + dnscrypt-proxy |
-| `pihole/compose.yml` | Pi-hole |
-| `keepalived/compose.yml` | keepalived (`network_mode: service:pihole`) |
-| `nebula-sync/compose.yml` | Pi-hole v6 config sync (`PRIMARY` / `REPLICAS` in `nebula-sync/.env`) |
-
-**Do not** run `docker compose` from inside `pihole/`, `macvlan/`, etc. alone—you would get an incomplete project (missing networks, peers, or mounts).
-
-**Bind mounts in `include`d fragments** are resolved relative to **that fragment’s `compose.yml`**, not the repo root (for example `keepalived/compose.yml` uses **`./keepalived.conf`** next to that file). **`--project-directory .`** should still be the repo root when you invoke Compose from there.
-
-Equivalent without `include` (older tooling) would be the same **five** `-f` paths plus `--project-directory "$(pwd)"`; the root **`compose.yml`** is the supported entrypoint.
+**Bind mounts** in each fragment are still resolved relative to **that fragment’s `compose.yml`** (e.g. **`keepalived/keepalived.conf`** beside **`keepalived/compose.yml`**).
 
 ## Deploying on dns1 and dns2
 
-Use the **same git tree** on both servers (clone, rsync, or pull). On **each** host you maintain **local** `.env` files (not committed). The **compose files are identical** on dns1 and dns2; only **env values** (and rendered **`keepalived/keepalived.conf`**) differ.
+Use the **same git tree** on both servers. On **each** host, local **`.env`** files (and **`keepalived.conf`**) differ only by node role and IPs as below.
 
 | File | dns1 | dns2 |
 |------|------|------|
 | `macvlan/.env` | Usually **same** on both (parent NIC, subnet, gateway for the shared LAN). |
 | `dnscrypt-proxy/.env` | Usually **same** (e.g. `TZ`). |
 | `pihole/.env` | **`PIHOLE_IPV4`** = this host’s Pi-hole IP on macvlan. **`SERVERIP`** = VIP (same both). Match **`WEBPASSWORD`** with **`nebula-sync/.env`** (password segment in `PRIMARY` / `REPLICAS` URLs). |
-| `keepalived/.env` | **`ROUTER_ID`** unique per node. **`VRRP_STATE`** `MASTER` on preferred primary, **`BACKUP`** on the other. **`VRRP_PRIORITY`** higher on primary (e.g. 110 vs 100). **`UNICAST_SRC_IP`** = this node’s LAN IP; **`UNICAST_PEER_IP`** = the other node’s LAN IP. **`VIP_CIDR`** and **`VRRP_AUTH_PASS`** **must match** on both. |
-| `nebula-sync/.env` | Usually **same** on both nodes: **`PRIMARY`** and **`REPLICAS`** list both Pi-hole base URLs and passwords (`http://ip\|password`). Each host runs its own `nebula-sync` container; identical config keeps both pointed at the same pair of instances. |
+| `keepalived/.env` | **`ROUTER_ID`** unique per node. **`VRRP_STATE`** `MASTER` on preferred primary, **`BACKUP`** on the other. **`VRRP_PRIORITY`** higher on primary (e.g. 110 vs 100). **`UNICAST_SRC_IP`** / **`UNICAST_PEER_IP`** swapped per node. **`VIP_CIDR`** and **`VRRP_AUTH_PASS`** **must match** on both. |
+| `nebula-sync/.env` | Usually **same** on both nodes: **`PRIMARY`** and **`REPLICAS`** (`http://ip\|password`). |
 
-After editing **`keepalived/.env`** on a host, re-render config on **that** host:
+After editing **`keepalived/.env`**, re-render **`keepalived.conf`**:
 
 ```bash
 (cd keepalived && set -a && source .env && set +a && envsubst < keepalived.conf.template > keepalived.conf)
 ```
 
-Then from the repo root:
-
-```bash
-docker compose --project-directory . up -d
-```
+Then **`./stack.sh up`** again as needed.
 
 **Example (illustrative IPs)**  
 
@@ -59,42 +58,40 @@ docker compose --project-directory . up -d
 | VRRP | `MASTER`, priority `110` | `BACKUP`, priority `100` |
 | Unicast src / peer | src `.5`, peer `.10` | src `.10`, peer `.5` |
 
-## First-time setup on each server
+## Fragment compose files (merged by stack.sh)
 
-```bash
-chmod +x init-env.sh   # once
-./init-env.sh
-```
+| File | Role |
+|------|------|
+| `macvlan/compose.yml` | Macvlan network `pihole_macvlan` |
+| `dnscrypt-proxy/compose.yml` | Internal bridge + dnscrypt-proxy |
+| `pihole/compose.yml` | Pi-hole |
+| `keepalived/compose.yml` | keepalived (`network_mode: service:pihole`) |
+| `nebula-sync/compose.yml` | nebula-sync |
 
-**`init-env.sh`** walks through prompts: this node is **primary** (MASTER) or **peer** (BACKUP), primary and peer **Pi-hole IPs**, **VIP**, **macvlan subnet** and **gateway**, optional NIC (**`eth0`** default) and **timezone**, then **Pi-hole web password** and **VRRP shared secret** (typed twice each). It writes **`macvlan/.env`**, **`dnscrypt-proxy/.env`**, **`pihole/.env`**, **`keepalived/.env`**, **`nebula-sync/.env`**, and renders **`keepalived/keepalived.conf`**. Run it on **each** host with the **same** IPs, VIP, subnet, gateway, passwords, and secret; only **primary vs peer** changes. Use **`--force`** to skip the overwrite confirmation if files already exist.
-
-Alternatively, copy from each **`*.env.example`** and edit by hand (see the dns1/dns2 table), then render **`keepalived.conf`** with **`envsubst`**.
-
-Then **`docker compose --project-directory . up -d`** from the repo root.
-
-**Old external network:** if `pihole_macvlan` already exists from a manual `docker network create`, remove it once: `docker network rm pihole_macvlan`, then bring the stack up again.
+Do not run **`docker compose -f …`** on a **single** fragment alone; you will miss networks, env merge, or mounts.
 
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| `compose.yml` | Root Compose project (`include` + per-fragment `env_file`, Compose **v2.24+**) |
-| `init-env.sh` | Interactive setup: writes `*/.env` and `keepalived/keepalived.conf` from prompts |
-| `macvlan/` | Macvlan network |
-| `dnscrypt-proxy/` | Internal bridge + dnscrypt; `etc-dnscrypt-proxy/` |
-| `pihole/` | Pi-hole; persistent data under `etc-pihole/` and `etc-dnsmasq.d/` |
-| `keepalived/` | VRRP sidecar; `keepalived.conf.template` → `keepalived.conf` |
-| `nebula-sync/` | Pi-hole v6 sync (required; wired into root `compose.yml`) |
+| `stack.sh` | **`init`** (prompts → env + keepalived.conf), **`up`** / **`down`**, compose passthrough |
+| `macvlan/` | Macvlan network compose + `.env` |
+| `dnscrypt-proxy/` | dnscrypt + `etc-dnscrypt-proxy/` |
+| `pihole/` | Pi-hole; data under `etc-pihole/` and `etc-dnsmasq.d/` |
+| `keepalived/` | VRRP; template → **`keepalived.conf`** (mounted by Compose) |
+| `nebula-sync/` | nebula-sync compose + `.env` |
 
 Git ignores `*/.env`, `keepalived/keepalived.conf`, and `nebula-sync/.env`.
 
 ## Requirements
 
 - Docker and Compose **v2.24+**
-- `gettext` / `envsubst` for `keepalived.conf`
-- Pi-hole instances reachable from each host running the stack (for nebula-sync `PRIMARY` / `REPLICAS` URLs)
+- `gettext` / `envsubst` for **`keepalived.conf`** (and **`stack.sh init`**)
+- Pi-hole IPs reachable from each host for nebula-sync
 
 ## Optional
 
-- **Pi-hole password** — after changing `WEBPASSWORD`, update **`nebula-sync/.env`** URL passwords, recreate `pihole`, and run `docker exec -it pihole pihole setpassword` if needed.
-- **Replicas / app passwords** — see [nebula-sync](https://github.com/lovelaze/nebula-sync) for `webserver.api.app_sudo` and related Pi-hole v6 settings.
+- **Pi-hole password** — after changing `WEBPASSWORD`, update **`nebula-sync/.env`**, recreate **`pihole`**, and/or `docker exec -it pihole pihole setpassword`.
+- **Replicas / app passwords** — [nebula-sync](https://github.com/lovelaze/nebula-sync) docs.
+
+**Old external network:** if **`pihole_macvlan`** already exists from a manual **`docker network create`**, remove it once: **`docker network rm pihole_macvlan`**, then **`./stack.sh up`**.
