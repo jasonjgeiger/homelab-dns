@@ -1,6 +1,11 @@
 networks:
-  pihole_macvlan:
-    external: true
+  # pihole_macvlan is defined in ../macvlan/compose.yml (root compose include).
+  # Duplicates dnscrypt-proxy/compose.yml; merge collapses to one network.
+  pihole_internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
 
 services:
   pihole:
@@ -23,8 +28,8 @@ services:
       - DNS2=${DNS2}
       - DNSMASQ_LISTENING=all
     volumes:
-      - ./pihole:/etc/pihole
-      - ./dnsmasq.d:/etc/dnsmasq.d
+      - ./dns-setup/pihole:/etc/pihole
+      - ./dns-setup/dnsmasq.d:/etc/dnsmasq.d
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "dig", "@127.0.0.1", "google.com", "+short"]

@@ -18,7 +18,8 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      - ../dns-setup/etc-dnscrypt-proxy:/config
+      # Paths relative to repo root; use `docker compose --project-directory <repo-root>` (see ../README.md)
+      - ./dnscrypt-proxy/etc-dnscrypt-proxy:/config
     dns:
       - 1.1.1.1
     restart: unless-stopped

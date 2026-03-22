@@ -1,9 +1,19 @@
-# High availability DNS stack (Docker Compose 2.24+ `include`). From repo root:
-#   docker compose --env-file dns-setup/.env.vm1 up -d
-# Or run dns-setup/deploy.sh (multi-file compose; works on older Compose).
+# HA DNS stack — Docker Compose 2.24+ `include` with per-fragment `.env` files.
+# From repo root (required for bind-mount paths):
+#   docker compose --project-directory . up -d
+#
+# First time: copy each `.env.example` to `.env` in `macvlan/`, `dnscrypt-proxy/`,
+# `pihole/`, and `keepalived/`, then render `keepalived/keepalived.conf` (see README).
 name: pihole
 
 include:
+  - path: macvlan/compose.yml
+    env_file:
+      - macvlan/.env
   - path: dnscrypt-proxy/compose.yml
+    env_file:
+      - dnscrypt-proxy/.env
   - path: pihole/compose.yml
+    env_file:
+      - pihole/.env
   - path: keepalived/compose.yml

@@ -1,4 +1,4 @@
-# Minimal dnscrypt-proxy config; mounted by ../dnscrypt-proxy/compose.yml (listens on :5300).
+# Minimal dnscrypt-proxy config; mounted by ./compose.yml in this directory (listens on :5300).
 # Edit server_names, sources, or filters to match https://dnscrypt.info/doc
 
 server_names = ['cloudflare']

@@ -1,7 +1,15 @@
 .specstory/
-# dns-setup — local secrets and generated keepalived config
+# dns-setup — optional local overrides (legacy)
 dns-setup/.env
-dns-setup/keepalived.conf
+
+# Per-service secrets (copy from each `.env.example`)
+macvlan/.env
+dnscrypt-proxy/.env
+pihole/.env
+keepalived/.env
+
+# Rendered from keepalived/keepalived.conf.template
+keepalived/keepalived.conf
 
 # nebula-sync — local credentials
 nebula-sync/.env

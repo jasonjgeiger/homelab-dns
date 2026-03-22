@@ -1,0 +1,10 @@
+# Docker macvlan network for Pi-hole on the LAN (vars from macvlan/.env).
+networks:
+  pihole_macvlan:
+    driver: macvlan
+    driver_opts:
+      parent: ${PARENT_INTERFACE}
+    ipam:
+      config:
+        - subnet: ${MACVLAN_SUBNET}
+          gateway: ${MACVLAN_GATEWAY}
