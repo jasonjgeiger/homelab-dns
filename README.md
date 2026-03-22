@@ -66,9 +66,11 @@ chmod +x init-env.sh   # once
 ./init-env.sh
 ```
 
-Copies each `*/.env.example` → `*/.env`. Existing `.env` files are left alone unless you pass **`--force`**.
+**`init-env.sh`** walks through prompts: this node is **primary** (MASTER) or **peer** (BACKUP), primary and peer **Pi-hole IPs**, **VIP**, **macvlan subnet** and **gateway**, optional NIC (**`eth0`** default) and **timezone**, then **Pi-hole web password** and **VRRP shared secret** (typed twice each). It writes **`macvlan/.env`**, **`dnscrypt-proxy/.env`**, **`pihole/.env`**, **`keepalived/.env`**, **`nebula-sync/.env`**, and renders **`keepalived/keepalived.conf`**. Run it on **each** host with the **same** IPs, VIP, subnet, gateway, passwords, and secret; only **primary vs peer** changes. Use **`--force`** to skip the overwrite confirmation if files already exist.
 
-Edit the `.env` files per the dns1/dns2 table above, render **`keepalived.conf`** (command above), then **`docker compose --project-directory . up -d`**.
+Alternatively, copy from each **`*.env.example`** and edit by hand (see the dns1/dns2 table), then render **`keepalived.conf`** with **`envsubst`**.
+
+Then **`docker compose --project-directory . up -d`** from the repo root.
 
 **Old external network:** if `pihole_macvlan` already exists from a manual `docker network create`, remove it once: `docker network rm pihole_macvlan`, then bring the stack up again.
 
@@ -77,7 +79,7 @@ Edit the `.env` files per the dns1/dns2 table above, render **`keepalived.conf`*
 | Path | Purpose |
 |------|---------|
 | `compose.yml` | Root Compose project (`include` + per-fragment `env_file`, Compose **v2.24+**) |
-| `init-env.sh` | Copies `*/.env.example` → `*/.env` for the stack |
+| `init-env.sh` | Interactive setup: writes `*/.env` and `keepalived/keepalived.conf` from prompts |
 | `macvlan/` | Macvlan network |
 | `dnscrypt-proxy/` | Internal bridge + dnscrypt; `etc-dnscrypt-proxy/` |
 | `pihole/` | Pi-hole; persistent data under `etc-pihole/` and `etc-dnsmasq.d/` |
