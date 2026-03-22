@@ -2,7 +2,6 @@
 .DS_Store
 
 # Per-service secrets (copy from each `.env.example`)
-dnscrypt-proxy/.env
 pihole/.env
 keepalived/.env
 nebula-sync/.env

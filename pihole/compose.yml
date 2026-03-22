@@ -9,7 +9,6 @@ networks:
       config:
         - subnet: ${MACVLAN_SUBNET}
           gateway: ${MACVLAN_GATEWAY}
-  # Duplicates dnscrypt-proxy/compose.yml; merge collapses to one network.
   pihole_internal:
     driver: bridge
     ipam:
@@ -17,6 +16,23 @@ networks:
         - subnet: 10.0.1.0/24
 
 services:
+  dnscrypt-proxy:
+    container_name: dnscrypt-proxy
+    image: klutchell/dnscrypt-proxy:latest
+    networks:
+      pihole_internal:
+        ipv4_address: 10.0.1.2
+    expose:
+      - "5300/tcp"
+      - "5300/udp"
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./dnscrypt-proxy/etc-dnscrypt-proxy:/config
+    dns:
+      - 1.1.1.1
+    restart: unless-stopped
+
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
@@ -46,3 +62,18 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+
+  keepalived:
+    container_name: keepalived
+    image: osixia/keepalived:2.0.20
+    depends_on:
+      - pihole
+    network_mode: service:pihole
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+      - NET_RAW
+    privileged: true
+    volumes:
+      - ./keepalived/keepalived.conf:/container/service/keepalived/assets/keepalived.conf:ro
+    restart: unless-stopped

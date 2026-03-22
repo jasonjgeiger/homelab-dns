@@ -15,18 +15,15 @@ stack_compose() {
   docker compose \
     --project-directory "$ROOT" \
     -p "$PROJECT_NAME" \
-    -f "$ROOT/dnscrypt-proxy/compose.yml" \
     -f "$ROOT/pihole/compose.yml" \
-    -f "$ROOT/keepalived/compose.yml" \
     -f "$ROOT/nebula-sync/compose.yml" \
-    --env-file "$ROOT/dnscrypt-proxy/.env" \
     --env-file "$ROOT/pihole/.env" \
     --env-file "$ROOT/nebula-sync/.env" \
     "$@"
 }
 
 preflight_env_files() {
-  for f in dnscrypt-proxy/.env pihole/.env nebula-sync/.env; do
+  for f in pihole/.env nebula-sync/.env; do
     [[ -f "$ROOT/$f" ]] || die "missing $f — run: $0 init"
   done
 }
@@ -48,11 +45,11 @@ cmd_up() {
   stack_compose up -d keepalived
   echo "==> nebula-sync"
   stack_compose up -d nebula-sync
-  echo "Done. docker compose -p $PROJECT_NAME ps"
+  echo "Done. Check status: $0 ps"
 }
 
 stack_down() {
-  if [[ -f "$ROOT/pihole/.env" && -f "$ROOT/dnscrypt-proxy/.env" ]]; then
+  if [[ -f "$ROOT/pihole/.env" && -f "$ROOT/nebula-sync/.env" ]]; then
     stack_compose down --remove-orphans
   else
     echo "warn: missing some .env files; running: docker compose -p $PROJECT_NAME down" >&2
@@ -71,7 +68,7 @@ parse_yes_flag() {
 # Remove project containers, networks, declared/anonymous volumes for this stack, and images used only by these services.
 stack_purge() {
   local f
-  for f in dnscrypt-proxy/.env pihole/.env nebula-sync/.env; do
+  for f in pihole/.env nebula-sync/.env; do
     [[ -f "$ROOT/$f" ]] || die "missing $f — cannot run compose teardown. Use '$0 down' or restore .env from *.env.example"
   done
   echo "==> docker compose down --remove-orphans -v --rmi all (project $PROJECT_NAME only)"
@@ -97,7 +94,6 @@ cmd_wipe() {
   stack_purge
   echo "==> Removing local env and rendered keepalived config"
   rm -f \
-    "$ROOT/dnscrypt-proxy/.env" \
     "$ROOT/pihole/.env" \
     "$ROOT/keepalived/.env" \
     "$ROOT/nebula-sync/.env" \
@@ -184,7 +180,7 @@ cmd_init() {
 
   if [[ "$FORCE" -eq 0 ]]; then
     local existing=0
-    for d in dnscrypt-proxy pihole keepalived nebula-sync; do
+    for d in pihole keepalived nebula-sync; do
       [[ -f "$ROOT/$d/.env" ]] && existing=1
     done
     [[ -f "$ROOT/keepalived/keepalived.conf" ]] && existing=1
@@ -246,10 +242,6 @@ cmd_init() {
   vrrp_q=$(quote_env_value "$vrrp_secret")
 
   mkdir -p "$ROOT/dnscrypt-proxy" "$ROOT/pihole" "$ROOT/keepalived" "$ROOT/nebula-sync"
-
-  cat >"$ROOT/dnscrypt-proxy/.env" <<EOF
-TZ=${tz}
-EOF
 
   cat >"$ROOT/pihole/.env" <<EOF
 PARENT_INTERFACE=${iface}
