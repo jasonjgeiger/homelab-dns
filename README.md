@@ -1,50 +1,72 @@
 # Homelab DNS
 
-HA Pi-hole (two nodes, keepalived VIP) with dnscrypt upstream. Compose stacks live at the **repo root**: `dnscrypt-proxy/`, `pihole-core/`, and `keepalived/`; root `compose.yml` **`include`**s them (Docker Compose **2.24+**). Config, env files, and data dirs stay in **`dns-node/`**; run **`dns-node/deploy.sh`** from there (it calls `docker compose` from the repo root).
+**High availability (HA)** Pi-hole: two nodes share a **virtual IP (VIP)** via keepalived so clients keep using one DNS address if a node fails. Upstream queries go through **dnscrypt-proxy** on a private Docker bridge, then Pi-hole.
 
-| | IP |
-|--|-----|
-| VM1 | 192.168.100.5 |
-| VM2 | 192.168.100.10 |
-| VIP (client DNS) | 192.168.100.100 |
+## Layout
 
-## Secrets (set before deploy)
+| Path | Purpose |
+|------|---------|
+| **`dns-setup/`** | Per-node env (`.env.vm1` / `.env.vm2`), `deploy.sh`, `validate.sh`, `validate_all.sh`, macvlan + keepalived helpers, `etc-dnscrypt-proxy/`, and data dirs `pihole/` + `dnsmasq.d/` (bind-mounted into the container) |
+| **`dnscrypt-proxy/`** | Compose fragment: internal network + dnscrypt |
+| **`pihole/`** | Compose fragment: Pi-hole service + macvlan |
+| **`keepalived/`** | Compose fragment: VRRP sidecar (`network_mode: service:pihole`) |
+| **`compose.yml`** (repo root) | Merges the three fragments with Compose **`include`** (Docker Compose **2.24+**) |
+| **`nebula-sync/`** | Optional Pi-hole v6 config sync between nodes |
 
-**`dns-node/.env.vm1` and `dns-node/.env.vm2`**
+## Example IPs
+
+| Role | Address |
+|------|---------|
+| Pi-hole on VM1 | 192.168.100.5 |
+| Pi-hole on VM2 | 192.168.100.10 |
+| VIP (set in DHCP for clients) | 192.168.100.100 |
+
+Change these in `dns-setup/.env.vm*` to match your LAN.
+
+## Prerequisites
+
+- Docker + Docker Compose v2 on each DNS node  
+- `gettext` / `envsubst` (for `deploy.sh`)  
+- Same macvlan + keepalived VIP settings on both nodes; unique per-node Pi-hole IP and keepalived priority  
+
+## Secrets (before deploy)
+
+**`dns-setup/.env.vm1` and `dns-setup/.env.vm2`**
 
 | Variable | Notes |
 |----------|--------|
-| `WEBPASSWORD` | Pi-hole web UI + API password (use the **same** value on both nodes if you want one login; nebula-sync needs it too). |
-| `VRRP_AUTH_PASS` | keepalived VRRP shared secret — **must match on both nodes**. |
+| `WEBPASSWORD` | Pi-hole web + API password; use the **same** on both nodes if you want one login (needed for nebula-sync too). |
+| `VRRP_AUTH_PASS` | keepalived shared secret — **must match on both nodes**. |
 
-**`nebula-sync/.env`** (if you use sync)
+**`nebula-sync/.env`** (if you use sync): `PRIMARY` / `REPLICAS` use `http://host|password` — set the password part to each node’s Pi-hole password.
 
-| Variable | Notes |
-|----------|--------|
-| `PRIMARY` / `REPLICAS` | URLs use `http://host|password` — replace the password segment with each Pi-hole’s web/API password (same idea as `WEBPASSWORD`). |
-
-Do not commit real values: root `.gitignore` excludes `dns-node/.env`, `nebula-sync/.env`, and `dns-node/keepalived.conf` once generated.
+`.gitignore` excludes `dns-setup/.env`, `dns-setup/keepalived.conf`, and `nebula-sync/.env` so secrets are not committed by default.
 
 ## Deploy
 
 ```bash
-cd dns-node
+cd dns-setup
 chmod +x deploy.sh create_macvlan.sh check_pihole.sh notify.sh validate.sh validate_all.sh
 ./deploy.sh .env.vm1   # first node
 ./deploy.sh .env.vm2   # second node
 ```
 
-Also adjust non-secret settings in `.env.vm*` as needed (e.g. `PARENT_INTERFACE`, IPs). Copy `dns-node/.env.example` if you build a custom `.env`.
+Tune `PARENT_INTERFACE`, subnets, and IPs in `.env.vm*`. Copy `dns-setup/.env.example` to build a custom `.env`.
 
-From the **repo root** (Compose 2.24+): `docker compose --env-file dns-node/.env.vm1 up -d`. Otherwise same three `-f` paths as in `dns-node/deploy.sh`.
+**From the repo root** (Compose 2.24+):  
+`docker compose --env-file dns-setup/.env.vm1 up -d`  
+
+Older Compose: same three `-f` files as in `dns-setup/deploy.sh`.
 
 ## Optional
 
-- **`nebula-sync/`** — sync Pi-hole v6 config between nodes ([nebula-sync](https://github.com/lovelaze/nebula-sync)). `./deploy.sh` there; set `.env` from `.env.example`.
-- **Web login** — `WEBPASSWORD` in `.env` is applied via `FTLCONF_webserver_api_password`; recreate the `pihole` container after changes, or run `docker exec -it pihole pihole setpassword`.
+- **[nebula-sync](https://github.com/lovelaze/nebula-sync)** — `cd nebula-sync && ./deploy.sh` (creates `.env` from `.env.example` on first run). On replicas, enable `webserver.api.app_sudo` if you use app passwords (see upstream README).  
+- **Web login** — `WEBPASSWORD` is applied as `FTLCONF_webserver_api_password`. After changing it, recreate the `pihole` container or run `docker exec -it pihole pihole setpassword`.
 
-## Check
+## Validate
 
 ```bash
-./dns-node/validate_all.sh
+./dns-setup/validate_all.sh
 ```
+
+Runs `dns-setup/validate.sh` (stack files + `docker compose config`) and `nebula-sync/validate.sh`.

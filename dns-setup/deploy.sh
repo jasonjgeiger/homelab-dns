@@ -8,7 +8,7 @@ if [[ ! -f "$SCRIPT_DIR/$ENV_FILE" ]]; then
   echo "Missing env file: $SCRIPT_DIR/$ENV_FILE"
   echo "Usage on VM1: $0 .env.vm1"
   echo "       on VM2: $0 .env.vm2"
-  echo "Or copy .env.example to .env in dns-node/, edit, then: $0 .env"
+  echo "Or copy .env.example to .env in dns-setup/, edit, then: $0 .env"
   exit 1
 fi
 
@@ -43,12 +43,12 @@ fi
 bash "$SCRIPT_DIR/create_macvlan.sh"
 
 export ROUTER_ID VRRP_STATE VRRP_PRIORITY VRRP_AUTH_PASS UNICAST_SRC_IP UNICAST_PEER_IP VIP_CIDR
-envsubst < "$SCRIPT_DIR/keepalived.conf.template" > "$SCRIPT_DIR/keepalived.conf"
+envsubst < "$SCRIPT_DIR/keepalived.conf.template" > "$ROOT/keepalived/keepalived.conf"
 
 cd "$ROOT"
 COMPOSE=(docker compose
   -f dnscrypt-proxy/compose.yml
-  -f pihole-core/compose.yml
+  -f pihole/compose.yml
   -f keepalived/compose.yml
   --env-file "$SCRIPT_DIR/$ENV_FILE")
 

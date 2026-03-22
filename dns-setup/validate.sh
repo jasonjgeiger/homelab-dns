@@ -13,7 +13,7 @@ require_file() {
 }
 
 for f in "$ROOT/compose.yml" \
-         "$ROOT/dnscrypt-proxy/compose.yml" "$ROOT/pihole-core/compose.yml" "$ROOT/keepalived/compose.yml" \
+         "$ROOT/dnscrypt-proxy/compose.yml" "$ROOT/pihole/compose.yml" "$ROOT/keepalived/compose.yml" \
          "$SCRIPT_DIR/check_pihole.sh" "$SCRIPT_DIR/notify.sh" "$SCRIPT_DIR/keepalived.conf.template" \
          "$SCRIPT_DIR/create_macvlan.sh" "$SCRIPT_DIR/deploy.sh" \
          "$SCRIPT_DIR/.env.example" "$SCRIPT_DIR/.env.vm1" "$SCRIPT_DIR/.env.vm2" \
@@ -50,7 +50,7 @@ if command -v docker >/dev/null 2>&1; then
   envsubst < "$SCRIPT_DIR/keepalived.conf.template" > "$SCRIPT_DIR/keepalived.conf"
   COMPOSE_BASE=(docker compose
     -f "$ROOT/dnscrypt-proxy/compose.yml"
-    -f "$ROOT/pihole-core/compose.yml"
+    -f "$ROOT/pihole/compose.yml"
     -f "$ROOT/keepalived/compose.yml")
   if (cd "$ROOT" && "${COMPOSE_BASE[@]}" --env-file "$SCRIPT_DIR/.env.vm1" config >/dev/null 2>&1); then
     echo "OK: docker compose config (.env.vm1)"
