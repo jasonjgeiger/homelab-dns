@@ -18,8 +18,8 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      # Paths relative to repo root; use `docker compose --project-directory <repo-root>` (see ../README.md)
-      - ./dnscrypt-proxy/etc-dnscrypt-proxy:/config
+      # Relative to this file (see keepalived/compose.yml comment).
+      - ./etc-dnscrypt-proxy:/config
     dns:
       - 1.1.1.1
     restart: unless-stopped

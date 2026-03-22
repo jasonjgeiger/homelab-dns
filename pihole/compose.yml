@@ -28,8 +28,9 @@ services:
       - DNS2=${DNS2}
       - DNSMASQ_LISTENING=all
     volumes:
-      - ./dns-setup/pihole:/etc/pihole
-      - ./dns-setup/dnsmasq.d:/etc/dnsmasq.d
+      # Relative to this file (see keepalived/compose.yml comment).
+      - ./etc-pihole:/etc/pihole
+      - ./etc-dnsmasq.d:/etc/dnsmasq.d
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "dig", "@127.0.0.1", "google.com", "+short"]
