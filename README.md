@@ -22,7 +22,7 @@ That command loads **`compose.yml`**, which **`include`s** these fragments (each
 
 **Do not** run `docker compose` from inside `pihole/`, `macvlan/`, etc. alone—you would get an incomplete project (missing networks, peers, or mounts).
 
-**Bind mounts in `include`d fragments** are resolved relative to **that fragment’s `compose.yml`**, not the repo root (e.g. `keepalived/compose.yml` uses `./keepalived.conf` and `../dns-setup/...`). **`--project-directory .`** should still be the repo root when you invoke Compose from there (consistent project context and paths in comments).
+**Bind mounts in `include`d fragments** are resolved relative to **that fragment’s `compose.yml`**, not the repo root (for example `keepalived/compose.yml` uses **`./keepalived.conf`** next to that file). **`--project-directory .`** should still be the repo root when you invoke Compose from there.
 
 Equivalent without `include` (older tooling) would be the same **five** `-f` paths plus `--project-directory "$(pwd)"`; the root **`compose.yml`** is the supported entrypoint.
 
@@ -80,10 +80,9 @@ Edit the `.env` files per the dns1/dns2 table above, render **`keepalived.conf`*
 | `init-env.sh` | Copies `*/.env.example` → `*/.env` for the stack |
 | `macvlan/` | Macvlan network |
 | `dnscrypt-proxy/` | Internal bridge + dnscrypt; `etc-dnscrypt-proxy/` |
-| `pihole/` | Pi-hole |
+| `pihole/` | Pi-hole; persistent data under `etc-pihole/` and `etc-dnsmasq.d/` |
 | `keepalived/` | VRRP sidecar; `keepalived.conf.template` → `keepalived.conf` |
 | `nebula-sync/` | Pi-hole v6 sync (required; wired into root `compose.yml`) |
-| `dns-setup/` | Pi-hole data dirs, notify/check scripts, optional `create_macvlan.sh` |
 
 Git ignores `*/.env`, `keepalived/keepalived.conf`, and `nebula-sync/.env`.
 
@@ -95,14 +94,5 @@ Git ignores `*/.env`, `keepalived/keepalived.conf`, and `nebula-sync/.env`.
 
 ## Optional
 
-- **`dns-setup/create_macvlan.sh`** — emergency `docker network create` only; Compose normally owns the macvlan from `macvlan/`.
 - **Pi-hole password** — after changing `WEBPASSWORD`, update **`nebula-sync/.env`** URL passwords, recreate `pihole`, and run `docker exec -it pihole pihole setpassword` if needed.
 - **Replicas / app passwords** — see [nebula-sync](https://github.com/lovelaze/nebula-sync) for `webserver.api.app_sudo` and related Pi-hole v6 settings.
-
-## Validate
-
-If **`dns-setup/validate_all.sh`** exists in your tree, run:
-
-```bash
-./dns-setup/validate_all.sh
-```

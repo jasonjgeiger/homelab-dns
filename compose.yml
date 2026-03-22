@@ -2,7 +2,7 @@
 # From repo root (required for bind-mount paths):
 #   docker compose --project-directory . up -d
 #
-# First time: ./init-env.sh (or copy .env.example → .env per service), then render keepalived.conf (see README).
+# First time: ./init-env.sh, then render keepalived/keepalived.conf (see README).
 name: pihole
 
 include:

@@ -28,7 +28,7 @@ services:
       - DNS2=${DNS2}
       - DNSMASQ_LISTENING=all
     volumes:
-      # Relative to this file (see keepalived/compose.yml comment).
+      # Relative to this compose file (include path resolution).
       - ./etc-pihole:/etc/pihole
       - ./etc-dnsmasq.d:/etc/dnsmasq.d
     restart: unless-stopped

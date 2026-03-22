@@ -1,11 +1,4 @@
 global_defs { router_id ${ROUTER_ID}; }
-vrrp_script check_pihole {
-    script "/usr/local/bin/check_pihole.sh"
-    interval 2
-    weight -20
-    fall 3
-    rise 2
-}
 vrrp_instance VI_1 {
     state ${VRRP_STATE}
     interface eth0
@@ -16,7 +9,4 @@ vrrp_instance VI_1 {
     unicast_src_ip ${UNICAST_SRC_IP}
     unicast_peer { ${UNICAST_PEER_IP}; }
     virtual_ipaddress { ${VIP_CIDR}; }
-    track_script { check_pihole; }
-    notify_master "/usr/local/bin/notify.sh MASTER"
-    notify_backup "/usr/local/bin/notify.sh BACKUP"
 }
