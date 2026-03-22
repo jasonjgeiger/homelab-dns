@@ -25,7 +25,7 @@ chmod +x stack.sh   # once
 ./stack.sh up
 ```
 
-Compose flags used internally: **`-p pihole`**, five absolute **`-f`** paths under the repo, four absolute **`--env-file`** paths. **`stack.sh`** does **not** set **`--project-directory`**, so each fragment’s **bind mounts** resolve from **that compose file’s directory** (as if you ran compose from `keepalived/`, `pihole/`, etc.). **`keepalived/.env`** is not passed to Compose (only used to render **`keepalived.conf`**).
+Compose flags: **`--project-directory`** = repo root, **`-p pihole`**, five absolute **`-f`** paths, four absolute **`--env-file`** paths. With **multiple `-f` files**, Docker Compose resolves **all** bind-mount sources from that **single** project directory (otherwise the **first** `-f` file’s folder wins—e.g. `./keepalived.conf` wrongly becomes **`macvlan/keepalived.conf`**). So volume paths in the YAML are **repo-root-relative** (`./keepalived/keepalived.conf`, `./pihole/etc-pihole`, …). **`keepalived/.env`** is only for **`envsubst`**, not Compose.
 
 ## Deploying on dns1 and dns2
 

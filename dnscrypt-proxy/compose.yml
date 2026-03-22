@@ -18,8 +18,8 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      # Relative to this directory (dnscrypt-proxy/), same as running compose from here.
-      - ./etc-dnscrypt-proxy:/config
+      # Relative to stack.sh --project-directory (repo root); see README.
+      - ./dnscrypt-proxy/etc-dnscrypt-proxy:/config
     dns:
       - 1.1.1.1
     restart: unless-stopped

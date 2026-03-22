@@ -28,9 +28,9 @@ services:
       - DNS2=${DNS2}
       - DNSMASQ_LISTENING=all
     volumes:
-      # Relative to this directory (pihole/), same as running compose from here.
-      - ./etc-pihole:/etc/pihole
-      - ./etc-dnsmasq.d:/etc/dnsmasq.d
+      # Relative to stack.sh --project-directory (repo root); see README.
+      - ./pihole/etc-pihole:/etc/pihole
+      - ./pihole/etc-dnsmasq.d:/etc/dnsmasq.d
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "dig", "@127.0.0.1", "google.com", "+short"]

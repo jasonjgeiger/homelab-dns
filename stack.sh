@@ -11,8 +11,10 @@ die() { echo "error: $*" >&2; exit 1; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing '$1' in PATH"; }
 
 stack_compose() {
-  # No --project-directory: bind mounts in each -f file resolve from that file's directory (Compose spec).
+  # Multi-file compose uses ONE project directory for bind mounts; without this, it follows the *first*
+  # -f file (macvlan/), breaking paths like ./keepalived.conf → macvlan/keepalived.conf. Anchor at repo root.
   docker compose \
+    --project-directory "$ROOT" \
     -p "$PROJECT_NAME" \
     -f "$ROOT/macvlan/compose.yml" \
     -f "$ROOT/dnscrypt-proxy/compose.yml" \
