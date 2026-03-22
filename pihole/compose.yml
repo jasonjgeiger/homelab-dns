@@ -28,7 +28,7 @@ services:
       - DNS2=${DNS2}
       - DNSMASQ_LISTENING=all
     volumes:
-      # Relative to this compose file (include path resolution).
+      # Relative to this directory (pihole/), same as running compose from here.
       - ./etc-pihole:/etc/pihole
       - ./etc-dnsmasq.d:/etc/dnsmasq.d
     restart: unless-stopped

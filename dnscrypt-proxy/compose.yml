@@ -18,7 +18,7 @@ services:
     environment:
       TZ: ${TZ}
     volumes:
-      # Relative to this compose file (include path resolution).
+      # Relative to this directory (dnscrypt-proxy/), same as running compose from here.
       - ./etc-dnscrypt-proxy:/config
     dns:
       - 1.1.1.1

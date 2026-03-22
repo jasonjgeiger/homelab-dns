@@ -9,6 +9,6 @@ services:
       - NET_RAW
     privileged: true
     volumes:
-      # Relative to this compose file (include path resolution).
+      # Relative to this directory (keepalived/), same as running compose from here.
       - ./keepalived.conf:/container/service/keepalived/assets/keepalived.conf:ro
     restart: unless-stopped

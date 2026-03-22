@@ -25,9 +25,7 @@ chmod +x stack.sh   # once
 ./stack.sh up
 ```
 
-Compose flags used internally: **`--project-directory`** = repo root, **`-p pihole`**, five **`-f`** fragment paths, four **`--env-file`** entries (`macvlan`, `dnscrypt-proxy`, `pihole`, `nebula-sync`). **`keepalived/.env`** is not passed to Compose (only used to render **`keepalived.conf`**).
-
-**Bind mounts** in each fragment are still resolved relative to **that fragment’s `compose.yml`** (e.g. **`keepalived/keepalived.conf`** beside **`keepalived/compose.yml`**).
+Compose flags used internally: **`-p pihole`**, five absolute **`-f`** paths under the repo, four absolute **`--env-file`** paths. **`stack.sh`** does **not** set **`--project-directory`**, so each fragment’s **bind mounts** resolve from **that compose file’s directory** (as if you ran compose from `keepalived/`, `pihole/`, etc.). **`keepalived/.env`** is not passed to Compose (only used to render **`keepalived.conf`**).
 
 ## Deploying on dns1 and dns2
 

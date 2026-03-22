@@ -11,8 +11,8 @@ die() { echo "error: $*" >&2; exit 1; }
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing '$1' in PATH"; }
 
 stack_compose() {
+  # No --project-directory: bind mounts in each -f file resolve from that file's directory (Compose spec).
   docker compose \
-    --project-directory "$ROOT" \
     -p "$PROJECT_NAME" \
     -f "$ROOT/macvlan/compose.yml" \
     -f "$ROOT/dnscrypt-proxy/compose.yml" \
