@@ -30,7 +30,7 @@ preflight_env_files() {
 
 preflight_env() {
   preflight_env_files
-  [[ -f "$ROOT/keepalived/keepalived.conf" ]] || die "missing keepalived/keepalived.conf — run: $0 init"
+  [[ -f "$ROOT/keepalived/assets/keepalived.conf" ]] || die "missing keepalived/assets/keepalived.conf — run: $0 init"
 }
 
 cmd_up() {
@@ -88,7 +88,7 @@ cmd_trash() {
 cmd_wipe() {
   require_cmd docker
   if ! parse_yes_flag "$@"; then
-    read -r -p "Wipe: purge stack '$PROJECT_NAME' (same as trash) AND delete local */.env + keepalived/keepalived.conf? [y/N] " ans
+    read -r -p "Wipe: purge stack '$PROJECT_NAME' (same as trash) AND delete local */.env + keepalived/assets/keepalived.conf? [y/N] " ans
     [[ "${ans,,}" == "y" || "${ans,,}" == "yes" ]] || { echo "Aborted."; exit 0; }
   fi
   stack_purge
@@ -97,11 +97,11 @@ cmd_wipe() {
     "$ROOT/pihole/.env" \
     "$ROOT/keepalived/.env" \
     "$ROOT/nebula-sync/.env" \
-    "$ROOT/keepalived/keepalived.conf"
+    "$ROOT/keepalived/assets/keepalived.conf"
   echo "Done (wipe). Run: $0 init && $0 up"
 }
 
-# --- init (interactive env + keepalived.conf) ---
+# --- init (interactive env + keepalived/assets/keepalived.conf) ---
 
 quote_env_value() {
   local s=$1
@@ -183,7 +183,7 @@ cmd_init() {
     for d in pihole keepalived nebula-sync; do
       [[ -f "$ROOT/$d/.env" ]] && existing=1
     done
-    [[ -f "$ROOT/keepalived/keepalived.conf" ]] && existing=1
+    [[ -f "$ROOT/keepalived/assets/keepalived.conf" ]] && existing=1
     if [[ "$existing" -eq 1 ]]; then
       read -r -p "Some .env or keepalived.conf already exist. Overwrite? [y/N]: " ans
       [[ "${ans,,}" == "y" || "${ans,,}" == "yes" ]] || { echo "Aborted."; exit 0; }
@@ -241,7 +241,7 @@ cmd_init() {
   web_q=$(quote_env_value "$webpass")
   vrrp_q=$(quote_env_value "$vrrp_secret")
 
-  mkdir -p "$ROOT/dnscrypt-proxy" "$ROOT/pihole" "$ROOT/keepalived" "$ROOT/nebula-sync"
+  mkdir -p "$ROOT/dnscrypt-proxy" "$ROOT/pihole" "$ROOT/keepalived/assets" "$ROOT/nebula-sync"
 
   cat >"$ROOT/pihole/.env" <<EOF
 PARENT_INTERFACE=${iface}
@@ -289,10 +289,10 @@ EOF
   export UNICAST_PEER_IP=$peer_unicast
   export VIP_CIDR=$vip_cidr
 
-  envsubst <"$ROOT/keepalived/keepalived.conf.template" >"$ROOT/keepalived/keepalived.conf"
+  envsubst <"$ROOT/keepalived/keepalived.conf.template" >"$ROOT/keepalived/assets/keepalived.conf"
 
   echo
-  echo "Wrote env files and keepalived/keepalived.conf."
+  echo "Wrote env files and keepalived/assets/keepalived.conf."
   echo "This node: ${role} (${state}). Start stack: $0 up"
 }
 
@@ -300,11 +300,11 @@ usage() {
   cat <<EOF
 Usage: $0 <command>
 
-  init [--force]   Interactive prompts → writes */.env and keepalived/keepalived.conf
+  init [--force]   Interactive prompts → writes */.env and keepalived/assets/keepalived.conf
   up               Start stack (dnscrypt-proxy → pihole → keepalived → nebula-sync)
   down             Stop and remove containers/networks for this project
   trash [--yes]    compose down for project $PROJECT_NAME: containers, networks, volumes (-v), images (--rmi all)
-  wipe [--yes]     Same as trash + delete all */.env and keepalived/keepalived.conf in repo
+  wipe [--yes]     Same as trash + delete all */.env and keepalived/assets/keepalived.conf in repo
   pull             Pull images
   ps | logs | config   Pass-through to docker compose (same project + files)
 

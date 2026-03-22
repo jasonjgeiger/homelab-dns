@@ -8,12 +8,12 @@ There is **no root `compose.yml`**. **`stack.sh`** merges the fragment compose f
 
 | Command | Purpose |
 |---------|---------|
-| `./stack.sh init` | Interactive prompts → writes `*/.env` and `keepalived/keepalived.conf` |
+| `./stack.sh init` | Interactive prompts → writes `*/.env` and `keepalived/assets/keepalived.conf` |
 | `./stack.sh init --force` | Same, skip overwrite confirmation |
 | `./stack.sh up` | Bring the stack up (ordered starts) |
 | `./stack.sh down` | Stop/remove project **`pihole`** |
 | `./stack.sh trash [--yes]` | **`docker compose down --remove-orphans -v --rmi all`** for project **`pihole` only** (containers, project networks/volumes, service images) |
-| `./stack.sh wipe [--yes]` | Same as **`trash`**, then deletes **`pihole/.env`**, **`keepalived/.env`**, **`nebula-sync/.env`**, and **`keepalived/keepalived.conf`** |
+| `./stack.sh wipe [--yes]` | Same as **`trash`**, then deletes **`pihole/.env`**, **`keepalived/.env`**, **`nebula-sync/.env`**, and **`keepalived/assets/keepalived.conf`** |
 | `./stack.sh pull` | Pull images |
 | `./stack.sh ps` / `logs` / `config` / `exec` … | Passed through to `docker compose` with the same files and env |
 
@@ -29,7 +29,7 @@ Compose flags: **`--project-directory`** = repo root, **`-p pihole`**, **two** a
 
 ## Deploying on dns1 and dns2
 
-Use the **same git tree** on both servers. On **each** host, local **`.env`** files (and **`keepalived.conf`**) differ only by node role and IPs as below.
+Use the **same git tree** on both servers. On **each** host, local **`.env`** files (and **`keepalived/assets/keepalived.conf`**) differ only by node role and IPs as below.
 
 | File | dns1 | dns2 |
 |------|------|------|
@@ -37,10 +37,10 @@ Use the **same git tree** on both servers. On **each** host, local **`.env`** fi
 | `keepalived/.env` | **`ROUTER_ID`** unique per node. **`VRRP_STATE`** `MASTER` on preferred primary, **`BACKUP`** on the other. **`VRRP_PRIORITY`** higher on primary (e.g. 110 vs 100). **`UNICAST_SRC_IP`** / **`UNICAST_PEER_IP`** swapped per node. **`VIP_CIDR`** and **`VRRP_AUTH_PASS`** **must match** on both. |
 | `nebula-sync/.env` | Usually **same** on both nodes: **`PRIMARY`** and **`REPLICAS`** (`http://ip\|password`). |
 
-After editing **`keepalived/.env`**, re-render **`keepalived.conf`**:
+After editing **`keepalived/.env`**, re-render **`keepalived/assets/keepalived.conf`**:
 
 ```bash
-(cd keepalived && set -a && source .env && set +a && envsubst < keepalived.conf.template > keepalived.conf)
+(cd keepalived && set -a && source .env && set +a && envsubst < keepalived.conf.template > assets/keepalived.conf)
 ```
 
 Then **`./stack.sh up`** again as needed.
@@ -67,13 +67,13 @@ Use **`./stack.sh`** (or the same **`-f`** list and **`--project-directory`**) s
 
 | Path | Purpose |
 |------|---------|
-| `stack.sh` | **`init`** (prompts → env + keepalived.conf), **`up`** / **`down`**, compose passthrough |
+| `stack.sh` | **`init`** (prompts → env + **`keepalived/assets/keepalived.conf`**), **`up`** / **`down`**, compose passthrough |
 | `dnscrypt-proxy/` | **`etc-dnscrypt-proxy/`** config (mounted by **`pihole/compose.yml`**) |
 | `pihole/` | Compose (**dnscrypt + Pi-hole + keepalived + networks**) + **`pihole/.env`**; data under `etc-pihole/` and `etc-dnsmasq.d/` |
-| `keepalived/` | VRRP config only; template → **`keepalived.conf`** (mounted by **`pihole/compose.yml`**) |
+| `keepalived/` | VRRP: template + **`assets/keepalived.conf`** (directory mount for osixia image; see README) |
 | `nebula-sync/` | nebula-sync compose + `.env` |
 
-Git ignores `*/.env`, `keepalived/keepalived.conf`, and `nebula-sync/.env`.
+Git ignores `*/.env`, `keepalived/assets/keepalived.conf`, and `nebula-sync/.env`.
 
 ## Requirements
 
@@ -83,6 +83,7 @@ Git ignores `*/.env`, `keepalived/keepalived.conf`, and `nebula-sync/.env`.
 
 ## Optional
 
+- **Upgrading from an older tree** — if you still have **`keepalived/keepalived.conf`** at the repo root of that folder, move it to **`keepalived/assets/keepalived.conf`** (create **`assets/`** if needed), then **`./stack.sh up`** again.
 - **Pi-hole password** — after changing `WEBPASSWORD`, update **`nebula-sync/.env`**, recreate **`pihole`**, and/or `docker exec -it pihole pihole setpassword`.
 - **Replicas / app passwords** — [nebula-sync](https://github.com/lovelaze/nebula-sync) docs.
 

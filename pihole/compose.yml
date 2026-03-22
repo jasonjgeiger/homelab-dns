@@ -74,6 +74,7 @@ services:
       - NET_BROADCAST
       - NET_RAW
     privileged: true
+    # Directory mount: a single-file bind blocks osixia's sed in-place edit (Resource busy).
     volumes:
-      - ./keepalived/keepalived.conf:/container/service/keepalived/assets/keepalived.conf:ro
+      - ./keepalived/assets:/container/service/keepalived/assets
     restart: unless-stopped

@@ -7,4 +7,4 @@ keepalived/.env
 nebula-sync/.env
 
 # Rendered from keepalived/keepalived.conf.template
-keepalived/keepalived.conf
+keepalived/assets/keepalived.conf
