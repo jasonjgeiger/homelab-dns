@@ -1,0 +1,26 @@
+# Minimal dnscrypt-proxy config for pihole/compose.yml (listens on :5300).
+# Edit server_names, sources, or filters to match https://dnscrypt.info/doc
+
+server_names = ['cloudflare']
+
+listen_addresses = ['0.0.0.0:5300']
+
+max_clients = 250
+
+ipv4_servers = true
+ipv6_servers = false
+dnscrypt_servers = true
+doh_servers = true
+
+require_dnssec = false
+
+[sources]
+  [sources.'public-resolvers']
+  urls = [
+    'https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md',
+    'https://cdn.jsdelivr.net/gh/DNSCrypt/dnscrypt-resolvers@v3/public-resolvers.md'
+  ]
+  cache_file = 'public-resolvers.md'
+  minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWkgSP9kwdYWiZYUGKQTlXoA'
+  refresh_delay = 72
+  prefix = ''
