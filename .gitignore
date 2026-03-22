@@ -1,7 +1,7 @@
 .specstory/
-# pihole/ HA stack — local secrets and generated keepalived config
-pihole/.env
-pihole/keepalived.conf
+# dns-node — local secrets and generated keepalived config
+dns-node/.env
+dns-node/keepalived.conf
 
 # nebula-sync — local credentials
 nebula-sync/.env

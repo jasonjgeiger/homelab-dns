@@ -1,0 +1,9 @@
+# Merges High Availability DNS stack (Docker Compose 2.24+). From repo root:
+#   docker compose --env-file dns-node/.env.vm1 up -d
+# Or use dns-setup/deploy.sh (works on older Compose via multiple -f).
+name: pihole
+
+include:
+  - path: dnscrypt-proxy/compose.yml
+  - path: pihole-core/compose.yml
+  - path: keepalived/compose.yml

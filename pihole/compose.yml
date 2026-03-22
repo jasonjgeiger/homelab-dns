@@ -1,30 +1,8 @@
 networks:
   pihole_macvlan:
     external: true
-  pihole_internal:
-    driver: bridge
-    ipam:
-      config:
-        - subnet: 10.0.1.0/24
 
 services:
-  dnscrypt-proxy:
-    container_name: dnscrypt-proxy
-    image: klutchell/dnscrypt-proxy:latest
-    networks:
-      pihole_internal:
-        ipv4_address: 10.0.1.2
-    expose:
-      - "5300/tcp"
-      - "5300/udp"
-    environment:
-      TZ: ${TZ}
-    volumes:
-      - ./etc-dnscrypt-proxy:/config
-    dns:
-      - 1.1.1.1
-    restart: unless-stopped
-
   pihole:
     container_name: pihole
     image: pihole/pihole:latest
@@ -38,36 +16,18 @@ services:
     cap_add:
       - NET_ADMIN
     environment:
-      # VIP clients use for DNS / web UI when using keepalived HA
       - FTLCONF_LOCAL_IPV4=${SERVERIP}
-      # v6: web login + API password (WEBPASSWORD in .env is mapped here — plain WEBPASSWORD is not reliable on v6)
       - FTLCONF_webserver_api_password=${WEBPASSWORD}
       - TZ=${TZ}
-      # Default: only dnscrypt (10.0.1.2); set DNS2 in .env for a plain-IP fallback
       - DNS1=${DNS1}
       - DNS2=${DNS2}
       - DNSMASQ_LISTENING=all
     volumes:
-      - ./pihole:/etc/pihole
-      - ./dnsmasq.d:/etc/dnsmasq.d
+      - ../dns-node/pihole:/etc/pihole
+      - ../dns-node/dnsmasq.d:/etc/dnsmasq.d
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "dig", "@127.0.0.1", "google.com", "+short"]
       interval: 30s
       timeout: 10s
       retries: 3
-
-  keepalived:
-    container_name: keepalived
-    image: osixia/keepalived:2.0.20
-    network_mode: service:pihole
-    cap_add:
-      - NET_ADMIN
-      - NET_BROADCAST
-      - NET_RAW
-    privileged: true
-    volumes:
-      - ./keepalived.conf:/container/service/keepalived/assets/keepalived.conf:ro
-      - ./check_pihole.sh:/usr/local/bin/check_pihole.sh:ro
-      - ./notify.sh:/usr/local/bin/notify.sh:ro
-    restart: unless-stopped

@@ -1,6 +1,6 @@
 # Homelab DNS
 
-HA Pi-hole (two nodes, keepalived VIP) with dnscrypt upstream. Docker Compose in `pihole/`.
+HA Pi-hole (two nodes, keepalived VIP) with dnscrypt upstream. Compose stacks live at the **repo root**: `dnscrypt-proxy/`, `pihole-core/`, and `keepalived/`; root `compose.yml` **`include`**s them (Docker Compose **2.24+**). Config, env files, and data dirs stay in **`dns-node/`**; run **`dns-node/deploy.sh`** from there (it calls `docker compose` from the repo root).
 
 | | IP |
 |--|-----|
@@ -10,7 +10,7 @@ HA Pi-hole (two nodes, keepalived VIP) with dnscrypt upstream. Docker Compose in
 
 ## Secrets (set before deploy)
 
-**`pihole/.env.vm1` and `pihole/.env.vm2`**
+**`dns-node/.env.vm1` and `dns-node/.env.vm2`**
 
 | Variable | Notes |
 |----------|--------|
@@ -23,18 +23,20 @@ HA Pi-hole (two nodes, keepalived VIP) with dnscrypt upstream. Docker Compose in
 |----------|--------|
 | `PRIMARY` / `REPLICAS` | URLs use `http://host|password` — replace the password segment with each Pi-hole’s web/API password (same idea as `WEBPASSWORD`). |
 
-Do not commit real values: root `.gitignore` excludes `pihole/.env`, `nebula-sync/.env`, and `pihole/keepalived.conf` once generated.
+Do not commit real values: root `.gitignore` excludes `dns-node/.env`, `nebula-sync/.env`, and `dns-node/keepalived.conf` once generated.
 
 ## Deploy
 
 ```bash
-cd pihole
-chmod +x deploy.sh create_macvlan.sh check_pihole.sh notify.sh validate.sh
+cd dns-node
+chmod +x deploy.sh create_macvlan.sh check_pihole.sh notify.sh validate.sh validate_all.sh
 ./deploy.sh .env.vm1   # first node
 ./deploy.sh .env.vm2   # second node
 ```
 
-Also adjust non-secret settings in `.env.vm*` as needed (e.g. `PARENT_INTERFACE`, IPs). Copy `pihole/.env.example` if you build a custom `.env`.
+Also adjust non-secret settings in `.env.vm*` as needed (e.g. `PARENT_INTERFACE`, IPs). Copy `dns-node/.env.example` if you build a custom `.env`.
+
+From the **repo root** (Compose 2.24+): `docker compose --env-file dns-node/.env.vm1 up -d`. Otherwise same three `-f` paths as in `dns-node/deploy.sh`.
 
 ## Optional
 
@@ -44,5 +46,5 @@ Also adjust non-secret settings in `.env.vm*` as needed (e.g. `PARENT_INTERFACE`
 ## Check
 
 ```bash
-./validate_all.sh
+./dns-node/validate_all.sh
 ```
