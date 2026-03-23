@@ -104,10 +104,28 @@ parse_yes_flag() {
   return 1
 }
 
+# Compose down only removes networks listed in the current file; older keys (e.g. pihole_internal) leave orphans like pihole_pihole_internal.
+prune_project_networks() {
+  local id name
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    if ! docker network rm "$id" 2>/dev/null; then
+      echo "warn: could not remove network id=$id (still attached? docker network inspect $id)" >&2
+    fi
+  done < <(docker network ls --filter "label=com.docker.compose.project=$PROJECT_NAME" -q)
+
+  # Legacy names from earlier compose (bridge was pihole_internal → pihole_pihole_internal)
+  for name in "${PROJECT_NAME}_${PROJECT_NAME}_internal" "${PROJECT_NAME}_default"; do
+    docker network rm "$name" 2>/dev/null || true
+  done
+}
+
 stack_purge() {
   [[ -f "$ENV_FILE" ]] || die "missing .env — cannot run compose teardown. Use '$0 down' or restore from .env.example"
   echo "==> docker compose down --remove-orphans -v --rmi all (project $PROJECT_NAME only)"
   stack_compose down --remove-orphans -v --rmi all
+  echo "==> prune leftover Docker networks for project $PROJECT_NAME (labels + legacy names)"
+  prune_project_networks
 }
 
 cmd_trash() {

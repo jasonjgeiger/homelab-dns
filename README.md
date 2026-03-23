@@ -13,7 +13,7 @@ HA Pi-hole: **keepalived** VIP, **dnscrypt-proxy** on **`pihole_net`**, **[nebul
 | `./stack.sh init` | Writes **`.env`**, renders **`keepalived/assets/keepalived.conf`** |
 | `./stack.sh render-keepalived` | Rebuild **`keepalived/assets/keepalived.conf`** after VRRP edits in **`.env`** |
 | `./stack.sh up` | Render keepalived, then ordered **`docker compose up`** |
-| `./stack.sh down` / `trash` / `wipe` / `pull` / `ps` … | See **`./stack.sh --help`** |
+| `./stack.sh down` / `trash` / `wipe` / `pull` / `ps` … | See **`./stack.sh --help`**. **`trash`** also removes Docker networks still labeled for this project (e.g. old **`pihole_pihole_internal`** after the bridge was renamed **`pihole_net`**) |
 
 ```bash
 chmod +x stack.sh

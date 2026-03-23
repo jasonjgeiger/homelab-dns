@@ -2,7 +2,8 @@
 .DS_Store
 
 .env
-
+etc-dnsmasq.d/*
+etc-pihole/*
 keepalived/assets/keepalived.conf
 
 # Leftover from older layouts (safe to delete locally)
