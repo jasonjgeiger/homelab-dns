@@ -1,58 +1,97 @@
 #!/usr/bin/env bash
-# DNS HA stack: no root compose.yml — this script merges fragment compose files and runs them
-# with a single project name. Use: ./stack.sh init | up | down | trash | wipe | pull | …
+# Homelab DNS stack: root compose.yml + .env — see ./stack.sh --help
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_NAME=pihole
+COMPOSE_FILE="$ROOT/compose.yml"
+ENV_FILE="$ROOT/.env"
+KEEPALIVED_TEMPLATE="$ROOT/keepalived/keepalived.conf.template"
+KEEPALIVED_CONF="$ROOT/keepalived/assets/keepalived.conf"
 
 die() { echo "error: $*" >&2; exit 1; }
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || die "missing '$1' in PATH"; }
 
 stack_compose() {
-  # Multi-file compose uses ONE project directory for bind mounts; anchor at repo root.
   docker compose \
     --project-directory "$ROOT" \
     -p "$PROJECT_NAME" \
-    -f "$ROOT/pihole/compose.yml" \
-    -f "$ROOT/nebula-sync/compose.yml" \
-    --env-file "$ROOT/pihole/.env" \
-    --env-file "$ROOT/nebula-sync/.env" \
+    -f "$COMPOSE_FILE" \
+    --env-file "$ENV_FILE" \
     "$@"
 }
 
+unquote_env_val() {
+  local val=$1
+  if [[ ${#val} -ge 2 && "${val:0:1}" == '"' && "${val: -1}" == '"' ]]; then
+    val="${val:1:${#val}-2}"
+    val="${val//\\\"/\"}"
+    val="${val//\\\\/\\}"
+  fi
+  printf '%s' "$val"
+}
+
+# Compose .env format — do not `source` whole file (DNS1 contains #).
+load_vrrp_env_from_dotenv() {
+  local line key val
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+    key="${line%%=*}"
+    [[ "$key" == "$line" ]] && continue
+    val="${line#"${key}="}"
+    case "$key" in
+      ROUTER_ID|VRRP_STATE|VRRP_PRIORITY|VRRP_AUTH_PASS|UNICAST_SRC_IP|UNICAST_PEER_IP|VIP_CIDR)
+        val=$(unquote_env_val "$val")
+        printf -v val_q '%q' "$val"
+        eval "export ${key}=${val_q}"
+        ;;
+    esac
+  done <"$ENV_FILE"
+}
+
+render_keepalived_conf() {
+  require_cmd envsubst
+  [[ -f "$ENV_FILE" ]] || die "missing .env"
+  load_vrrp_env_from_dotenv
+  local missing=()
+  [[ -n "${ROUTER_ID:-}" ]] || missing+=(ROUTER_ID)
+  [[ -n "${VRRP_STATE:-}" ]] || missing+=(VRRP_STATE)
+  [[ -n "${VRRP_PRIORITY:-}" ]] || missing+=(VRRP_PRIORITY)
+  [[ -n "${VRRP_AUTH_PASS:-}" ]] || missing+=(VRRP_AUTH_PASS)
+  [[ -n "${UNICAST_SRC_IP:-}" ]] || missing+=(UNICAST_SRC_IP)
+  [[ -n "${UNICAST_PEER_IP:-}" ]] || missing+=(UNICAST_PEER_IP)
+  [[ -n "${VIP_CIDR:-}" ]] || missing+=(VIP_CIDR)
+  ((${#missing[@]} == 0)) || die ".env missing keepalived vars: ${missing[*]}"
+  mkdir -p "$ROOT/keepalived/assets"
+  envsubst <"$KEEPALIVED_TEMPLATE" >"$KEEPALIVED_CONF"
+}
+
 preflight_env_files() {
-  for f in pihole/.env nebula-sync/.env; do
-    [[ -f "$ROOT/$f" ]] || die "missing $f — run: $0 init"
-  done
+  [[ -f "$ENV_FILE" ]] || die "missing .env — run: $0 init or cp .env.example .env"
 }
 
 preflight_env() {
   preflight_env_files
-  [[ -f "$ROOT/keepalived/assets/keepalived.conf" ]] || die "missing keepalived/assets/keepalived.conf — run: $0 init"
+  render_keepalived_conf
 }
 
 cmd_up() {
   require_cmd docker
   preflight_env
-  # Order: internal DNS first, then Pi-hole (depends on dnscrypt), then keepalived (uses pihole netns), then nebula.
-  echo "==> dnscrypt-proxy (and project networks)"
-  stack_compose up -d dnscrypt-proxy
-  echo "==> pihole"
-  stack_compose up -d pihole
-  echo "==> keepalived"
-  stack_compose up -d keepalived
-  echo "==> nebula-sync"
-  stack_compose up -d nebula-sync
+  # compose.yml orders services via depends_on + service_healthy; no per-service up needed.
+  echo "==> docker compose up -d (project $PROJECT_NAME)"
+  stack_compose up -d
   echo "Done. Check status: $0 ps"
 }
 
 stack_down() {
-  if [[ -f "$ROOT/pihole/.env" && -f "$ROOT/nebula-sync/.env" ]]; then
+  if [[ -f "$ENV_FILE" ]]; then
     stack_compose down --remove-orphans
   else
-    echo "warn: missing some .env files; running: docker compose -p $PROJECT_NAME down" >&2
+    echo "warn: missing .env; running: docker compose -p $PROJECT_NAME down" >&2
     docker compose -p "$PROJECT_NAME" down --remove-orphans
   fi
 }
@@ -65,12 +104,8 @@ parse_yes_flag() {
   return 1
 }
 
-# Remove project containers, networks, declared/anonymous volumes for this stack, and images used only by these services.
 stack_purge() {
-  local f
-  for f in pihole/.env nebula-sync/.env; do
-    [[ -f "$ROOT/$f" ]] || die "missing $f — cannot run compose teardown. Use '$0 down' or restore .env from *.env.example"
-  done
+  [[ -f "$ENV_FILE" ]] || die "missing .env — cannot run compose teardown. Use '$0 down' or restore from .env.example"
   echo "==> docker compose down --remove-orphans -v --rmi all (project $PROJECT_NAME only)"
   stack_compose down --remove-orphans -v --rmi all
 }
@@ -82,26 +117,20 @@ cmd_trash() {
     [[ "${ans,,}" == "y" || "${ans,,}" == "yes" ]] || { echo "Aborted."; exit 0; }
   fi
   stack_purge
-  echo "Done (trash). Host bind mounts (e.g. pihole data dirs) are unchanged."
+  echo "Done (trash). Host bind mounts (e.g. etc-pihole) are unchanged."
 }
 
 cmd_wipe() {
   require_cmd docker
   if ! parse_yes_flag "$@"; then
-    read -r -p "Wipe: purge stack '$PROJECT_NAME' (same as trash) AND delete local */.env + keepalived/assets/keepalived.conf? [y/N] " ans
+    read -r -p "Wipe: purge stack '$PROJECT_NAME' (same as trash) AND delete .env + keepalived/assets/keepalived.conf? [y/N] " ans
     [[ "${ans,,}" == "y" || "${ans,,}" == "yes" ]] || { echo "Aborted."; exit 0; }
   fi
   stack_purge
-  echo "==> Removing local env and rendered keepalived config"
-  rm -f \
-    "$ROOT/pihole/.env" \
-    "$ROOT/keepalived/.env" \
-    "$ROOT/nebula-sync/.env" \
-    "$ROOT/keepalived/assets/keepalived.conf"
+  echo "==> Removing .env and rendered keepalived/assets/keepalived.conf"
+  rm -f "$ENV_FILE" "$KEEPALIVED_CONF"
   echo "Done (wipe). Run: $0 init && $0 up"
 }
-
-# --- init (interactive env + keepalived/assets/keepalived.conf) ---
 
 quote_env_value() {
   local s=$1
@@ -180,12 +209,10 @@ cmd_init() {
 
   if [[ "$FORCE" -eq 0 ]]; then
     local existing=0
-    for d in pihole keepalived nebula-sync; do
-      [[ -f "$ROOT/$d/.env" ]] && existing=1
-    done
-    [[ -f "$ROOT/keepalived/assets/keepalived.conf" ]] && existing=1
+    [[ -f "$ENV_FILE" ]] && existing=1
+    [[ -f "$KEEPALIVED_CONF" ]] && existing=1
     if [[ "$existing" -eq 1 ]]; then
-      read -r -p "Some .env or keepalived.conf already exist. Overwrite? [y/N]: " ans
+      read -r -p ".env or keepalived/assets/keepalived.conf already exist. Overwrite? [y/N]: " ans
       [[ "${ans,,}" == "y" || "${ans,,}" == "yes" ]] || { echo "Aborted."; exit 0; }
     fi
   fi
@@ -241,9 +268,13 @@ cmd_init() {
   web_q=$(quote_env_value "$webpass")
   vrrp_q=$(quote_env_value "$vrrp_secret")
 
-  mkdir -p "$ROOT/dnscrypt-proxy" "$ROOT/pihole" "$ROOT/keepalived/assets" "$ROOT/nebula-sync"
+  mkdir -p "$ROOT/etc-pihole" "$ROOT/etc-dnsmasq.d" "$ROOT/etc-dnscrypt-proxy" "$ROOT/keepalived/assets"
 
-  cat >"$ROOT/pihole/.env" <<EOF
+  local neb_pri neb_rep
+  neb_pri=$(quote_env_value "http://${primary_ip}|${webpass}")
+  neb_rep=$(quote_env_value "http://${peer_ip}|${webpass}")
+
+  cat >"$ENV_FILE" <<EOF
 PARENT_INTERFACE=${iface}
 MACVLAN_SUBNET=${subnet}
 MACVLAN_GATEWAY=${gateway}
@@ -253,9 +284,11 @@ DNS1=10.0.1.2#5300
 DNS2=no
 TZ=${tz}
 WEBPASSWORD=${web_q}
-EOF
-
-  cat >"$ROOT/keepalived/.env" <<EOF
+PRIMARY=${neb_pri}
+REPLICAS=${neb_rep}
+FULL_SYNC=true
+RUN_GRAVITY=true
+CRON="*/15 * * * *"
 ROUTER_ID=${router_id}
 VRRP_STATE=${state}
 VRRP_PRIORITY=${priority}
@@ -264,35 +297,14 @@ UNICAST_SRC_IP=${src_ip}
 UNICAST_PEER_IP=${peer_unicast}
 VIP_CIDR=${vip_cidr}
 EOF
-
-  local neb_pri neb_rep
-  neb_pri=$(quote_env_value "http://${primary_ip}|${webpass}")
-  neb_rep=$(quote_env_value "http://${peer_ip}|${webpass}")
-  cat >"$ROOT/nebula-sync/.env" <<EOF
-PRIMARY=${neb_pri}
-REPLICAS=${neb_rep}
-
-FULL_SYNC=true
-RUN_GRAVITY=true
-CRON=*/15 * * * *
-TZ=${tz}
-EOF
   if [[ "$webpass" == *"|"* ]]; then
-    echo "warn: password contains '|' — nebula-sync delimiter; edit nebula-sync/.env manually." >&2
+    echo "warn: password contains '|' — nebula-sync delimiter; edit .env PRIMARY/REPLICAS manually." >&2
   fi
 
-  export ROUTER_ID=$router_id
-  export VRRP_STATE=$state
-  export VRRP_PRIORITY=$priority
-  export VRRP_AUTH_PASS=$vrrp_secret
-  export UNICAST_SRC_IP=$src_ip
-  export UNICAST_PEER_IP=$peer_unicast
-  export VIP_CIDR=$vip_cidr
-
-  envsubst <"$ROOT/keepalived/keepalived.conf.template" >"$ROOT/keepalived/assets/keepalived.conf"
+  render_keepalived_conf
 
   echo
-  echo "Wrote env files and keepalived/assets/keepalived.conf."
+  echo "Wrote .env and keepalived/assets/keepalived.conf."
   echo "This node: ${role} (${state}). Start stack: $0 up"
 }
 
@@ -300,22 +312,27 @@ usage() {
   cat <<EOF
 Usage: $0 <command>
 
-  init [--force]   Interactive prompts → writes */.env and keepalived/assets/keepalived.conf
-  up               Start stack (dnscrypt-proxy → pihole → keepalived → nebula-sync)
-  down             Stop and remove containers/networks for this project
-  trash [--yes]    compose down for project $PROJECT_NAME: containers, networks, volumes (-v), images (--rmi all)
-  wipe [--yes]     Same as trash + delete all */.env and keepalived/assets/keepalived.conf in repo
+  init [--force]   Interactive prompts → .env + keepalived/assets/keepalived.conf
+  render-keepalived   Rebuild keepalived/assets/keepalived.conf from .env
+  up               docker compose up -d (depends_on + pihole healthcheck in compose.yml)
+  down             Stop/remove project $PROJECT_NAME
+  trash [--yes]    compose down -v --rmi all for this project
+  wipe [--yes]     trash + remove .env and keepalived/assets/keepalived.conf
   pull             Pull images
-  ps | logs | config   Pass-through to docker compose (same project + files)
+  ps | logs | config | …   Compose passthrough
 
-  --yes / -y       Skip confirmation for trash / wipe
-
-Project name: $PROJECT_NAME (fixed for consistent container names)
+Compose: $COMPOSE_FILE  env: $ENV_FILE  project: $PROJECT_NAME
 EOF
 }
 
 case "${1:-}" in
   init) cmd_init "$@" ;;
+  render-keepalived)
+    require_cmd envsubst
+    preflight_env_files
+    render_keepalived_conf
+    echo "Wrote $KEEPALIVED_CONF"
+    ;;
   up) cmd_up ;;
   down)
     require_cmd docker

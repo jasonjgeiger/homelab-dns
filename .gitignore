@@ -1,10 +1,10 @@
 .specstory/
 .DS_Store
 
-# Per-service secrets (copy from each `.env.example`)
-pihole/.env
+.env
+
+keepalived/assets/keepalived.conf
+
+# Leftover from older layouts (safe to delete locally)
 keepalived/.env
 nebula-sync/.env
-
-# Rendered from keepalived/keepalived.conf.template
-keepalived/assets/keepalived.conf

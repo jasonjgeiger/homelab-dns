@@ -1,0 +1,106 @@
+# Compose file format: https://docs.docker.com/compose/compose-file/ (Docker Engine 29.x / Compose v2)
+name: pihole
+
+networks:
+  pihole_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+  pihole_macvlan:
+    driver: macvlan
+    driver_opts:
+      parent: ${PARENT_INTERFACE}
+    ipam:
+      config:
+        - subnet: ${MACVLAN_SUBNET}
+          gateway: ${MACVLAN_GATEWAY}
+
+services:
+  dnscrypt-proxy:
+    container_name: dnscrypt-proxy
+    image: klutchell/dnscrypt-proxy:latest
+    networks:
+      pihole_net:
+        ipv4_address: 10.0.1.2
+    expose:
+      - "5300/tcp"
+      - "5300/udp"
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./etc-dnscrypt-proxy:/config
+    dns:
+      - 1.1.1.1
+    restart: unless-stopped
+
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    depends_on:
+      dnscrypt-proxy:
+        condition: service_started
+    networks:
+      pihole_macvlan:
+        ipv4_address: ${PIHOLE_IPV4}
+      pihole_net:
+        ipv4_address: 10.0.1.3
+    ports:
+      - "53:53/tcp"
+      - "53:53/udp"
+      - "443:443/tcp"
+      - "80:80/tcp"
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - FTLCONF_LOCAL_IPV4=${SERVERIP}
+      - FTLCONF_webserver_api_password=${WEBPASSWORD}
+      - TZ=${TZ}
+      - DNS1=${DNS1}
+      - DNS2=${DNS2}
+      - DNSMASQ_LISTENING=all
+    volumes:
+      - ./etc-pihole:/etc/pihole
+      - ./etc-dnsmasq.d:/etc/dnsmasq.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "dig", "@127.0.0.1", "google.com", "+short"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # osixia/keepalived startup chmods /container/service/keepalived/assets/notify.sh — bind-mount ./keepalived/assets
+  # (with notify.sh + generated keepalived.conf). KEEPALIVED_CONF points at that file. Host: modprobe ip_vs.
+  # https://github.com/osixia/container-keepalived
+  keepalived:
+    container_name: keepalived
+    image: osixia/keepalived:2.3.4
+    depends_on:
+      pihole:
+        condition: service_healthy
+    network_mode: service:pihole
+    cap_add:
+      - NET_ADMIN
+      - NET_BROADCAST
+      - NET_RAW
+    environment:
+      KEEPALIVED_CONF: /container/service/keepalived/assets/keepalived.conf
+    volumes:
+      - ./keepalived/assets:/container/service/keepalived/assets
+    restart: unless-stopped
+
+  nebula-sync:
+    image: ghcr.io/lovelaze/nebula-sync:latest
+    container_name: nebula-sync
+    depends_on:
+      pihole:
+        condition: service_healthy
+    environment:
+      PRIMARY: ${PRIMARY}
+      REPLICAS: ${REPLICAS}
+      FULL_SYNC: ${FULL_SYNC:-true}
+      RUN_GRAVITY: ${RUN_GRAVITY:-true}
+      CRON: "${CRON:-*/15 * * * *}"
+      TZ: ${TZ:-America/Los_Angeles}
+    restart: unless-stopped
